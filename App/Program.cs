@@ -1,17 +1,65 @@
 ﻿using App;
 
 var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, _) => cts.Cancel();
+FileInfo? outputFile = null;
+
+Console.CancelKeyPress += (sender, e) =>
+{
+    Console.WriteLine("\nОтмена операции");
+    e.Cancel = true;
+    cts.Cancel();
+};
 
 var uris = Input.GetUris();
-var dest = Input.GetOutputFile();
-var destStream = dest.OpenWrite();
+outputFile = Input.GetOutputFile();
 
-await Parallel.ForEachAsync(uris, cts.Token, async (uri, ct) =>
+try
 {
-    using var http = new HttpClient();
-    await using var content = await http.GetStreamAsync(uri, ct);
-    await content.CopyToAsync(destStream, ct);
-});
+    var tasks = new List<Task>();
 
-await destStream.DisposeAsync();
+    foreach (var uri in uris)
+    {
+        var task = Task.Run(async () =>
+        {
+            try
+            {
+                using var http = new HttpClient();
+                var stream = await http.GetStreamAsync(uri, cts.Token);
+                using var reader = new StreamReader(stream);
+
+                var lines = new List<string>();
+
+                while (true)
+                {
+                    var line = await reader.ReadLineAsync(cts.Token);
+                    if (line == null) break;
+                    lines.Add(line);
+                }
+                await File.AppendAllLinesAsync(outputFile.FullName, lines, cts.Token);
+
+                Console.WriteLine($"Обработан {uri} ({lines.Count} строк)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при обработке {uri}: {ex.Message}");
+            }
+        }, cts.Token);
+        tasks.Add(task);
+    }
+    await Task.WhenAll(tasks);
+    var totalLines = File.ReadLines(outputFile.FullName).Count();
+    Console.WriteLine($"\nВсего строк {totalLines}");
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("Операция отменена");
+    if (outputFile?.Exists == true)
+    {
+        try
+        {
+            File.Delete(outputFile.FullName);
+            Console.WriteLine("файл удалён");
+        }
+        catch { }
+    }
+}

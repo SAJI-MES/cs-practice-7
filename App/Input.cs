@@ -15,20 +15,21 @@ public static class Input
         while (valid is false)
         {
             Console.Write("Введите нужные URL через пробел: ");
-            result = Console.ReadLine()!.Split(' ');
-            valid = result.Any(x => IsValidUri(x) is false);
+            result = Console.ReadLine()!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            valid = result.All(x => IsValidUri(x));
             if (valid is false)
             {
-                Console.WriteLine("Ошибка! Вы ввели некорректные URL!");
+                Console.WriteLine("Вы ввели некорректный URL");
             }
         }
-
         return result;
     }
+    private static bool IsValidUri(string uri)
+    {
+        return Uri.TryCreate(uri, UriKind.Absolute, out var uriResult)
+               && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+    }
 
-    private static bool IsValidUri(string uri) => uri.StartsWith("https://");
-    
-    
     /// <summary>
     /// Считывает от пользователя путь до файла с результатом.
     /// </summary>
@@ -36,15 +37,24 @@ public static class Input
     {
         while (true)
         {
-            Console.Write("Введите путь до файла с результатом: ");
+            Console.Write("Введите путь до файла с результатом");
             try
             {
                 var file = new FileInfo(Console.ReadLine()!);
+                if (file.Exists)
+                {
+                    Console.Write("Файл уже существует. Хотите его перезаписать? да или нет?");
+                    var answer = Console.ReadLine()!.ToLower();
+                    if (answer != "да")
+                    {
+                        continue;
+                    }
+                }
                 return file;
             }
             catch
             {
-                Console.WriteLine("Произошла ошибка, вероятно вы ввели некорректный путь. Попробуйте ещё раз.");
+                Console.WriteLine("Ошибка. Вы ввели некорректный путь. Попробуйте ещё раз");
             }
         }
     }
