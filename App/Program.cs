@@ -15,6 +15,9 @@ outputFile = Input.GetOutputFile();
 
 try
 {
+    using var writer = new StreamWriter(outputFile.FullName, append: false);
+    var writeLock = new object();
+    var totalLines = 0;
     var tasks = new List<Task>();
 
     foreach (var uri in uris)
@@ -27,27 +30,30 @@ try
                 var stream = await http.GetStreamAsync(uri, cts.Token);
                 using var reader = new StreamReader(stream);
 
-                var lines = new List<string>();
-
+                var linesCount = 0;
                 while (true)
                 {
                     var line = await reader.ReadLineAsync(cts.Token);
                     if (line == null) break;
-                    lines.Add(line);
+                    lock (writeLock)
+                    {
+                        writer.WriteLine(line);
+                        linesCount++;
+                        totalLines++;
+                    }
                 }
-                await File.AppendAllLinesAsync(outputFile.FullName, lines, cts.Token);
 
-                Console.WriteLine($"Обработан {uri} ({lines.Count} строк)");
+                Console.WriteLine($"Обработан {uri} {linesCount} строк");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка при обработке {uri}: {ex.Message}");
+                Console.WriteLine($"Ошибка при обработке {uri} {ex.Message}");
             }
         }, cts.Token);
         tasks.Add(task);
     }
+
     await Task.WhenAll(tasks);
-    var totalLines = File.ReadLines(outputFile.FullName).Count();
     Console.WriteLine($"\nВсего строк {totalLines}");
 }
 catch (OperationCanceledException)
